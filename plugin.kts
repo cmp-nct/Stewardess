@@ -10,6 +10,7 @@ import com.intellij.openapi.editor.InlayModel
 import com.intellij.openapi.editor.markup.TextAttributes
 import com.google.gson.GsonBuilder
 
+
 import com.intellij.notification.NotificationGroup
 import com.intellij.notification.NotificationType
 import com.intellij.notification.NotificationDisplayType
@@ -51,7 +52,12 @@ import javax.swing.JLabel
 import javax.swing.JComponent
 import java.awt.Color
 import java.awt.Font
+import com.intellij.openapi.Disposable
+import com.intellij.openapi.util.Disposer
+import java.util.concurrent.atomic.AtomicBoolean
 
+import com.intellij.openapi.util.TextRange
+import com.intellij.openapi.editor.ScrollType;
 
 
 import com.github.copilot.*
@@ -96,11 +102,6 @@ class copilot {
         fun getCurrentStatus(): Pair<CopilotStatus, String> {
             return CopilotStatusService.getCurrentStatus()
         }
-        // Get the Pair
-
-
-
-
 
     }
 
@@ -113,7 +114,7 @@ var project = copilot.findCurrentProject()
 var commandListener = CopilotCommandListener(project!!)
 var FILE_EDITOR_MANAGER = copilot.getFileEditorManager(project!!)
 var editor = FILE_EDITOR_MANAGER.getSelectedTextEditor()
-
+var DEBUG_LEVEL=0
 
 
 inline fun <reified T> Any.get_members(name: String):T {
@@ -137,6 +138,8 @@ public var inlayModel: InlayModel = copilot.getInlayModel(editor!!)
 //editorManager
 public var editorManager: CopilotEditorManagerImpl = copilot.getEditorManager()
 var circular_call = 0
+
+
 
     // action_call is true when a user requested this call, false when it was internally called
     fun assistCopilot(action_call: Boolean)
@@ -163,8 +166,7 @@ var circular_call = 0
         var has_completions = this.editorManager.hasCompletionInlays(editor!!) // returns true if there are any copilot inlays, manager also can do applyCompletion(editor)
         if (has_completions)
         {
-
-            var KEY_LAST_REQUEST = this.editorManager.accessField("KEY_LAST_REQUEST") as Key<*> // val
+            var KEY_LAST_REQUEST = this.editorManager.accessField("KEY_LAST_REQUEST") as Key<*>
             // KEY_LAST_REQUEST ist ein Key<"copilot.editorRequest">, com.github.copilot.request.EditorRequest
 
             var request = KEY_LAST_REQUEST.get(editor)  // = EditorRequestResultList, contains inlayLists. Aber .get() geht auf com.github.copilot.completions.CopilotInlayList
@@ -181,7 +183,7 @@ var circular_call = 0
             if (inlay_found.size <=0)
             {
             // debugging output
-                //show("start_offset: "+start_offset + " end_offset: "+end_offset + " line_count: "+line_count + " line_goal: "+line_goal + " line_number: "+line_number + " caretOffset: "+caretOffset +  " has_completions: "+has_completions)
+                if (DEBUG_LEVEL > 2) show("start_offset: "+start_offset + " end_offset: "+end_offset + " line_count: "+line_count + " line_goal: "+line_goal + " line_number: "+line_number + " caretOffset: "+caretOffset +  " has_completions: "+has_completions)
                 inlay_found = this.editorManager.collectInlays(editor!!, 0, editor!!.getDocument().getTextLength())
                 if (inlay_found.size > 0)
                 {
@@ -210,6 +212,7 @@ var circular_call = 0
                 //show("Array if inlays(fix): "+gson.toJson(inlay_content_array))
             }
 
+
             if (inlay_found.size > 0)
             {
                 var inlay = inlay_found[0]
@@ -220,16 +223,42 @@ var circular_call = 0
                 // go through lines and build inlay_content, adding a newline per line, this seems to be required to get proper completion
                 var inlay_content = ""
                 // if there are multiple lines in the inlay, add a newline per line if not already present
-                if (inlay_lines.size > 1 || inlay_found.size > 1)
-                {
+
                 // The first inlay is typically one line, the second one contains multiple lines of the entire next block
-                    for (inlay in inlay_found)
+                for (inlay in inlay_found)
+                {
+                    var inlay_index = inlay_found.indexOf(inlay)
+                    inlay_type = inlay.accessField("type") as CopilotCompletionType
+                    for (line in inlay_lines)
                     {
-                        inlay_lines = inlay.accessField("lines") as List<String> // is a ["string"]
-                        for (line in inlay_lines)
+                        if (inlay_type == CopilotCompletionType.Inline)
                         {
-                        // show( inlay number, line number, line content
-                        show("DEBUG inlay: "+inlay_found.indexOf(inlay) + " line: "+inlay_lines.indexOf(line) + " content: '"+line+"'")
+                            // inline inlays seem to always end with the line - there is a problem when the line is not empty after caret position, line might need to be cleaned to avoid double inserts (also an error of copilot)
+                            if (inlay_index > 0)
+                            {
+                                if (!inlay_content.endsWith("\n")) inlay_content += "\n"
+                                if (DEBUG_LEVEL > 1) show("DEBUG INLINE inlay: index > 0 - adding newline but not handling it now")
+                                continue
+                            }
+                            if (DEBUG_LEVEL > 1)show("DEBUG INLINE inlay : "+inlay_found.indexOf(inlay) + " line: "+inlay_lines.indexOf(line) + " content:"+gson.toJson(line))
+                            inlay_content += line
+                        } else
+                        if (inlay_type == CopilotCompletionType.Block)
+                        {
+                            if (inlay_index > 0)
+                            {
+                                if (!inlay_content.endsWith("\n")) inlay_content += "\n"
+                                if (DEBUG_LEVEL > 1)show("DEBUG BLOCK inlay: index > 0 - adding newline but not handling it now")
+                                continue
+                            } else
+                            {
+                                // it's the first inlay and it's a block inlay. For some reason we need to add a starting newline
+                                if (!inlay_content.startsWith("\n")) inlay_content = "\n" + inlay_content
+                            }
+                            if (DEBUG_LEVEL > 1)show("DEBUG BLOCK inlay : "+inlay_found.indexOf(inlay) + " line: "+inlay_lines.indexOf(line) + " content:"+gson.toJson(line))
+                            // not sure - with BLOCK inlays we just ensure that each line ends with a newline
+                            // block inserts inside comments could be fixed be avoiding the */ bug at the end (todo)
+
                             if (inlay_lines.indexOf(line) > 0 && !line.endsWith("\n"))
                             {
                                 inlay_content += line+"\n"
@@ -237,78 +266,103 @@ var circular_call = 0
                             {
                                 inlay_content += line
                             }
+
+                        } else
+                        if (inlay_type == CopilotCompletionType.AfterLineEnd)
+                        {
+                            // not seen in the wild yet
+                            if (DEBUG_LEVEL > 0)show("DEBUG AfterLineEnd inlay : "+inlay_found.indexOf(inlay) + " line: "+inlay_lines.indexOf(line) + " content:"+gson.toJson(line))
+                            inlay_content += line
                         }
                     }
-                    /*for (line in inlay_lines)
-                    {
-                        if (!line.endsWith("\n"))
-                        {
-                            inlay_content += line+"\n"
-                        }  else
-                        {
-                          inlay_content += line
-                        }
-                    }*/
-                } else
-                {
-                    inlay_content = inlay_lines[0]
+
+
                 }
+// this is the content of the inlay, it's a string
 
-
-
-
-
-                //show("Lines:"+gson.toJson(inlay_lines))
                 //var inlay_textAttributes = inlay.accessField("textAttributes") as TextAttributes //[java.awt.Color[r=2,g=160,b=255],null,0,BOXED,java.awt.Color[r=34,g=161,b=210],{},null]
                 //var inlay_cachedWidth = inlay.accessField("cachedWidth") as Int
                 //var inlay_cachedHeight = inlay.accessField("cachedHeight") as Int
                 // split inlay into inlay_content_words using whitespace as separator, include the delimiters in the words by using lookahead and lookbehind
-                var splitter = arrayOf("[.\\n]", "[\\s]") // this must include a whitespace, otherwise the split will not work
+                var splitter = arrayOf("[.\\n\\s()]") // this must include a whitespace, otherwise the split will not work
                 // regex for all entries in splitter using this template: (?<=X)|(?=X) where X is the entry in splitter
                 var splitter_regex = splitter.map { "(?<=" + it + ")|(?=" + it + ")" }.joinToString(separator = "|")
-                inlay_content = inlay_content + ' '; // add whitespace to end of inlay_content, so that the last word is also split
-                var inlay_content_words = inlay_content.split(Regex(splitter_regex)) // (?<=\\s)|(?=\\s)|(?<=,)|(?=,)
+                inlay_content = inlay_content + ' '; // add whitespace to end of inlay_content, so that the last word is also split (arraylist)
+                var inlay_content_words = inlay_content.split(Regex(splitter_regex)) as ArrayList<String>
+                // remove the one trailing whitespace from the last word
+                inlay_content_words[inlay_content_words.size-1] = inlay_content_words[inlay_content_words.size-1].dropLast(1)
 
-                // go through the words, if they are one of the regex characters in splitter then add them to the start of the next word. Use regex to match splitter characters
-                var inlay_content_words_cleaned = mutableListOf<String>()
-                var last_word = ""
+                // go through all words creating inlay_content_words_cleaned:
+                // if length of word is 0, skip it
+                // if the word solely consists of \t or ' ': skip it but remember it and prepend it to the next word
+                // if word exactly matches (regex) one of the splitter delimiters: skip it but remember it and prepend it to the next word
+
+                var inlay_content_words_cleaned = arrayOf("")
+                var inlay_content_words_cleaned_index = 0
+                var inlay_content_words_cleaned_last_word = ""
+                var cleaned_word = ""
                 for (word in inlay_content_words)
                 {
+                    if (word.length == 0)
+                    {
+                        continue
+                    }
+                    show ("DEBUG processing word: "+gson.toJson(word.toCharArray()))
+                    if (word.matches(Regex('^'+"[\\t ]+"+'$')))
+                    {
+                        inlay_content_words_cleaned_last_word = inlay_content_words_cleaned_last_word + word
+                        continue
+                    }
                     var splitter_match  = splitter.any { word.matches(Regex('^'+it+'$')) }
                     if (splitter_match)
                     {
-                        last_word += word
+                        inlay_content_words_cleaned_last_word = inlay_content_words_cleaned_last_word + word
+                        continue
                     }
-                    else
-                    {
-                        if (last_word != "") inlay_content_words_cleaned.add(last_word)
-                        last_word = word
-                    }
+                    cleaned_word = inlay_content_words_cleaned_last_word + word
+                    //show("added cleaned word: "+gson.toJson(cleaned_word.toCharArray()));
+                    inlay_content_words_cleaned[inlay_content_words_cleaned_index] = cleaned_word
+                    inlay_content_words_cleaned_last_word = ""
+                    inlay_content_words_cleaned_index += 1
+                    inlay_content_words_cleaned += ""
                 }
-                this.completion_storage = inlay_content_words_cleaned.toTypedArray()
-                // remove the ' ' from the end of the last word
-                var tmp =  this.completion_storage.last()
-                if (tmp.endsWith(' ')) tmp = tmp.substring(0, tmp.length-1)
-                this.completion_storage[this.completion_storage.size-1] = tmp // fix the hacky whitespace addition
-                // if the last word is empty, remove it
-                // if this.completion_storage has more entries than one \n character or whitespace then addcompletionWord()
+                if (inlay_content_words_cleaned_last_word.length > 0)
+                {
+                    // we ended with a delimiter collection that was not added to the last word
+                    inlay_content_words_cleaned[inlay_content_words_cleaned_index] = inlay_content_words_cleaned_last_word
+                }
+                // remove last empty entry if it is empty
+                if (inlay_content_words_cleaned[inlay_content_words_cleaned.size-1].length == 0)
+                {
+                    //inlay_content_words_cleaned = inlay_content_words_cleaned.dropLast(1).toTypedArray()
+                    inlay_content_words_cleaned = inlay_content_words_cleaned.sliceArray(0..inlay_content_words_cleaned.size-2)
 
-                 // if this.completion_storage last entry is a newline, remove it too
-                //if (this.completion_storage.last() == "\n") this.completion_storage = this.completion_storage.dropLast(1).toTypedArray()
-                // if this.completion_storage has one or more entries, continue
-                this.completion_storage = this.completion_storage.filter { it != "" }.toTypedArray() // remove empty entries, wherever they came from
+                }
+                this.completion_storage = inlay_content_words_cleaned
+
+// this is the content of the inlay, it's an array of strings (words)
+//if (inlay_type ==
+//                if (inlay_type == CopilotCompletionType.Block)
+
+
+
                 if (this.completion_storage.size > 0)
+                {
                     addCompletionWord(false) // first word is completed directly
-            } // this
+                }
+
+            }
 
         } else
         {
             show("No completion visible, requesting completion ..")
             this.editorManager.showNextInlaySet(editor!!)
+            // todo: instead trigger the request completion instead, should be native call and works better
         }
 
 
-// this is
+
+
         return
     }
     // public function that will add one completion word into the editor
@@ -319,16 +373,15 @@ var circular_call = 0
           // reset circular protection
           this.circular_call = 0
       }
-       // uses completion_storage, takes the first word, adds to the editor at caret position, removes the first word from completion_storage and moves carret to the right after the word
 
         if (this.completion_storage.size > 0)
         {
-            show("addCompletionWord start: "+gson.toJson(this.completion_storage) + "size: "+this.completion_storage.size);
             var word = ""
-            while (word.length < 1)
+            // not necessary anymore I guess, empty words are solved
+            while (word.length == 0)
             {
                 // if no words left exit
-                if (this.completion_storage.size < 1)
+                if (this.completion_storage.size == 0)
                 {
                     // nothing left, fetch current inlay if available
                     if (this.circular_call < 20)
@@ -346,16 +399,57 @@ var circular_call = 0
             }
 
             editor = FILE_EDITOR_MANAGER.getSelectedTextEditor()
-            editor!!.document.executeCommand(project!!, description = "Stewardess is typing")
+            editor!!.document.executeCommand(project!!, description = "Stewardess is typing for the Copilot")
             {
-                    // insert the whole word, character by character to seamlessly integrate with copilots feature to follow manual typing
+                    // insert the whole word, character by character to seamlessly integrate with copilots feature to follow manual (non bulk) typing
+                    // after a newline was inserted, then skip all prefixed whitespaces and tabs of the next word
+                    // this is required because Copilot already handles intendation but our \n triggers the IDE to add intendation as well
+
+                   var editor = FILE_EDITOR_MANAGER.getSelectedTextEditor()
+                    var document = editor!!.document
+                    var start_offset=0
+
+                    var skip_prefix_whitespaces = false
                     for (i in 0..word.length-1)
                     {
-                        //show(gson.toJson(word[i]))
-                        insertString(editor!!.caretModel.offset, word[i].toString())
-                        editor!!.getCaretModel().moveCaretRelatively(1, 0, false, false, true)
-                    }
+                        if (skip_prefix_whitespaces)
+                        {
+                            if (word[i] == ' ' || word[i] == '\t')
+                            {
+                                continue
+                            } else
+                            {
+                                skip_prefix_whitespaces = false
+                            }
+                        }
+                        if (word[i] == '\n')
+                        {
+                            //skip_prefix_whitespaces = true  // disabled
+                        }
+                        // show( the character we insert as json
+                        if (DEBUG_LEVEL > 2)show("DEBUG inserting character: "+gson.toJson(Character.toString(word[i])))
+                        // todo: the last word should be REPLACED into the document IF there are characters after the caret
+                        try
+                        {
+                            start_offset = editor!!.caretModel.offset;
+                            document.insertString(start_offset, Character.toString(word[i]))
 
+                            //insertString(editor!!.caretModel.offset, Character.toString(word[i]))
+                            editor!!.getCaretModel().moveToOffset(start_offset + Character.toString(word[i]).length);
+                            if (word[i] == '\n')
+                            {
+                                // move caret to begin of current line
+                                editor!!.getCaretModel().moveToOffset(document.getLineStartOffset(document.getLineNumber(start_offset+1)))
+                            }
+
+                        //  editor!!.getCaretModel().moveCaretRelatively(1, 0, false, false, true)
+                        } finally
+                        {
+                            // save ?
+                            editor!!.getScrollingModel().scrollToCaret(ScrollType.MAKE_VISIBLE);
+                        }
+
+                    }
                 }
 
         }
@@ -376,7 +470,11 @@ var circular_call = 0
     }
 
 
-    // manage an intellij notificationGroup, add the current copilot status into it
+
+
+
+
+
     public var previous_status: CopilotStatus? = CopilotStatus.Unsupported
     public var status_is_running: Boolean = false
     public var hints_shown_cycles: Int = 0
@@ -449,7 +547,8 @@ var circular_call = 0
 
             })
 
-    // Solution to
+    // Solution to show a notification in the tool window
+    //
 
 
 
@@ -460,6 +559,7 @@ var circular_call = 0
 
 
     }
+
 
 
 

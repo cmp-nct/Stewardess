@@ -13,6 +13,7 @@ It will simulate a user typing it, so Copilot will follow the typing without int
 Disclaimer:
 I am not affiliated with Github or Copilot. I do not recommend to modify copilot's behavior itself. 
 Anything that goes wrong is in your own responsibility. 
+I'm not a Kotlin or Java or Plugin developer, so the code might not be as flawless as it could be.
 
 How to use:
 Use Copilot as always just when ready to complete press the new shortcut.
@@ -24,3 +25,7 @@ How to install:
 2) create a new Kotlin plugin and copy/paste this plugin into it
 3) Run the plugin (you can auto-start it also)
 4) CTRL+ALT+D will activate the completion
+
+Contribute:
+I added a couple milestones that would advance this further.
+I think there is a lot that can be improved so contributors are welcome.

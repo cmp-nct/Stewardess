@@ -10,6 +10,17 @@ import com.intellij.openapi.editor.InlayModel
 import com.intellij.openapi.editor.markup.TextAttributes
 import com.google.gson.GsonBuilder
 
+import com.intellij.notification.NotificationGroup
+import com.intellij.notification.NotificationType
+import com.intellij.notification.NotificationDisplayType
+import com.intellij.notification.Notifications.Bus
+import com.intellij.openapi.wm.StatusBar
+import com.intellij.openapi.wm.StatusBarWidget.TextPresentation
+import com.intellij.openapi.wm.WindowManager
+import com.intellij.openapi.wm.impl.status.EditorBasedWidget;
+import com.intellij.codeInsight.hint.HintManager
+import com.intellij.codeInsight.hint.HintManagerImpl
+
 
 // depends-on-plugin com.github.copilot
 import com.github.copilot.util.ApplicationUtil
@@ -27,6 +38,21 @@ import com.github.copilot.editor.CopilotInlayRenderer
 import com.github.copilot.completions.CopilotCompletionType
 //import com.github.copilot.editor.EditorRequestResultList // private package
 //import com.github.copilot.completions.DefaultInlayList // implements CopilotInlayList .. again private ..
+import com.github.copilot.status.CopilotStatus
+import com.github.copilot.status.CopilotStatusService
+import com.intellij.openapi.util.Pair
+
+import java.util.Timer
+import kotlin.concurrent.schedule
+import com.intellij.util.concurrency.AppExecutorUtil
+import java.util.concurrent.TimeUnit
+import javax.swing.SwingUtilities
+import javax.swing.JLabel
+import javax.swing.JComponent
+import java.awt.Color
+import java.awt.Font
+
+
 
 import com.github.copilot.*
 
@@ -60,6 +86,21 @@ class copilot {
         fun isSelectedEditor(editor: Editor): Boolean {
             return CopilotEditorUtil.isSelectedEditor(editor)
         }
+
+        fun getStatusService(): CopilotStatusService {
+            return CopilotStatusService()
+        }
+        fun StatusNotify(status: CopilotStatus, message: String?) {
+            return CopilotStatusService.notifyApplication(status, message)
+        }
+        fun getCurrentStatus(): Pair<CopilotStatus, String> {
+            return CopilotStatusService.getCurrentStatus()
+        }
+        // Get the Pair
+
+
+
+
 
     }
 
@@ -178,10 +219,45 @@ var circular_call = 0
                 var inlay_type = inlay.accessField("type") as CopilotCompletionType // "Inline"
                 // go through lines and build inlay_content, adding a newline per line, this seems to be required to get proper completion
                 var inlay_content = ""
-                for (line in inlay_lines)
+                // if there are multiple lines in the inlay, add a newline per line if not already present
+                if (inlay_lines.size > 1 || inlay_found.size > 1)
                 {
-                    inlay_content += line+"\n"
+                // The first inlay is typically one line, the second one contains multiple lines of the entire next block
+                    for (inlay in inlay_found)
+                    {
+                        inlay_lines = inlay.accessField("lines") as List<String> // is a ["string"]
+                        for (line in inlay_lines)
+                        {
+                        // show( inlay number, line number, line content
+                        show("DEBUG inlay: "+inlay_found.indexOf(inlay) + " line: "+inlay_lines.indexOf(line) + " content: '"+line+"'")
+                            if (inlay_lines.indexOf(line) > 0 && !line.endsWith("\n"))
+                            {
+                                inlay_content += line+"\n"
+                            } else
+                            {
+                                inlay_content += line
+                            }
+                        }
+                    }
+                    /*for (line in inlay_lines)
+                    {
+                        if (!line.endsWith("\n"))
+                        {
+                            inlay_content += line+"\n"
+                        }  else
+                        {
+                          inlay_content += line
+                        }
+                    }*/
+                } else
+                {
+                    inlay_content = inlay_lines[0]
                 }
+
+
+
+
+
                 //show("Lines:"+gson.toJson(inlay_lines))
                 //var inlay_textAttributes = inlay.accessField("textAttributes") as TextAttributes //[java.awt.Color[r=2,g=160,b=255],null,0,BOXED,java.awt.Color[r=34,g=161,b=210],{},null]
                 //var inlay_cachedWidth = inlay.accessField("cachedWidth") as Int
@@ -214,8 +290,16 @@ var circular_call = 0
                 var tmp =  this.completion_storage.last()
                 if (tmp.endsWith(' ')) tmp = tmp.substring(0, tmp.length-1)
                 this.completion_storage[this.completion_storage.size-1] = tmp // fix the hacky whitespace addition
-                addCompletionWord(false) // first word is completed directly
-            }
+                // if the last word is empty, remove it
+                // if this.completion_storage has more entries than one \n character or whitespace then addcompletionWord()
+
+                 // if this.completion_storage last entry is a newline, remove it too
+                //if (this.completion_storage.last() == "\n") this.completion_storage = this.completion_storage.dropLast(1).toTypedArray()
+                // if this.completion_storage has one or more entries, continue
+                this.completion_storage = this.completion_storage.filter { it != "" }.toTypedArray() // remove empty entries, wherever they came from
+                if (this.completion_storage.size > 0)
+                    addCompletionWord(false) // first word is completed directly
+            } // this
 
         } else
         {
@@ -224,9 +308,7 @@ var circular_call = 0
         }
 
 
-
-
-
+// this is
         return
     }
     // public function that will add one completion word into the editor
@@ -241,7 +323,7 @@ var circular_call = 0
 
         if (this.completion_storage.size > 0)
         {
-            //show("addCompletionWord start: "+gson.toJson(this.completion_storage));
+            show("addCompletionWord start: "+gson.toJson(this.completion_storage) + "size: "+this.completion_storage.size);
             var word = ""
             while (word.length < 1)
             {
@@ -249,7 +331,14 @@ var circular_call = 0
                 if (this.completion_storage.size < 1)
                 {
                     // nothing left, fetch current inlay if available
-                    this.assistCopilot(false)
+                    if (this.circular_call < 20)
+                    {
+                        this.circular_call += 1
+                        this.assistCopilot(false)
+                    } else
+                    {
+                        show("Circular call protection triggered, exiting 1")
+                    }
                     return
                 }
                 word = this.completion_storage[0]
@@ -265,7 +354,6 @@ var circular_call = 0
                         //show(gson.toJson(word[i]))
                         insertString(editor!!.caretModel.offset, word[i].toString())
                         editor!!.getCaretModel().moveCaretRelatively(1, 0, false, false, true)
-                        // todo: caret on vertical (block,afterlineend types) inserts is not moved correctly
                     }
 
                 }
@@ -278,18 +366,127 @@ var circular_call = 0
             {
                 this.circular_call += 1
                 this.assistCopilot(false)
+            } else
+            {
+                show("Circular call protection triggered, exiting 2")
             }
 
         }
 
     }
+
+
+    // manage an intellij notificationGroup, add the current copilot status into it
+    public var previous_status: CopilotStatus? = CopilotStatus.Unsupported
+    public var status_is_running: Boolean = false
+    public var hints_shown_cycles: Int = 0
+
+    fun update_status(called_by_user: Boolean)
+    {
+        var copilot_status = "NOTIFICATION"
+        if (called_by_user)
+        {
+            this.status_is_running = !this.status_is_running
+            if (this.status_is_running)
+            {
+                show("Copilot's Stewardess: Status updates enabled")
+            }
+            else
+            {
+                show("Copilot's Stewardess: Status updates disabled")
+                // throw exception
+                throw Exception("Copilot's Stewardess: Status updates disabled (hack to disable notification)")
+            }
+
+        }
+        if(!this.status_is_running) return
+        if (this.hints_shown_cycles > 0)
+        {
+            this.hints_shown_cycles = this.hints_shown_cycles + 1
+            if (this.hints_shown_cycles > 5)
+            {
+                SwingUtilities.invokeLater(Runnable {
+                                this.hints_shown_cycles=0
+                                HintManager.getInstance().hideAllHints()
+
+                            })
+            }
+        }
+
+
+        //var notificationGroup = NotificationGroup.balloonGroup("me.copilot.stewardess", "Stewardess");
+        //var notificationGroup_tool = NotificationGroup("me.copilot.stewardess", NotificationDisplayType.TOOL_WINDOW, true);
+        //Bus.notify(notificationGroup.createNotification("Copilot Status", copilot_status, NotificationType.INFORMATION));
+
+        //test.getCurrentStatus()
+        var current_status = copilot.getCurrentStatus().getFirst() as CopilotStatus?;
+        var current_status_string = when (current_status) {
+            CopilotStatus.Ready -> "Ready"
+            CopilotStatus.NotSignedIn -> "NotSignedIn"
+            CopilotStatus.CompletionInProgress -> "CompletionInProgress"
+            CopilotStatus.AgentWarning -> "AgentWarning"
+            CopilotStatus.AgentError -> "AgentError"
+            CopilotStatus.AgentBroken -> "AgentBroken"
+            CopilotStatus.IncompatibleClient -> "IncompatibleClient"
+            CopilotStatus.Unsupported -> "Unsupported"
+            CopilotStatus.UnknownError -> "UnknownError"
+            else -> "Unknown"
+        }
+        if (this.previous_status != current_status)
+        {
+            //HintManager.getInstance().showInformationHint(editor!!, "Copilot Status: "+current_status_string)
+            // call this on Event Dispatch Thread (EDT)
+            SwingUtilities.invokeLater(Runnable {
+                    var jComponent = JLabel("Copilot Status: "+current_status_string)
+                    jComponent.isOpaque = true
+//                    jComponent.background = Color(200, 200, 255, 128)
+                    // smaller font
+                    jComponent.font = Font("Arial", Font.PLAIN, 9)
+                    HintManager.getInstance().showInformationHint(editor!!, jComponent)
+                    //
+                this.hints_shown_cycles=1
+//                HintManager.getInstance().showInformationHint(editor!!, "Copilot Status: "+current_status_string)
+
+            })
+
+    // Solution to
+
+
+
+            this.previous_status = current_status
+        }
+
+
+
+
+    }
+
+
+
+
+ 
+
+
 }
-
-
-
 
 var Stewardess = ClassStewardess();
 
+// write in kotlin code
+AppExecutorUtil.getAppScheduledExecutorService().scheduleWithFixedDelay({     Stewardess.update_status(false) }, 100, 250, TimeUnit.MILLISECONDS);
+
+//Timer().schedule(1000) {
+//     Stewardess.update_status()
+//}
+// kotlin:
+// this a
+
+//AppExecutorUtil.getAppScheduledExecutorService().scheduleWithFixedDelay({     Stewardess.update_status() }, 0, 1, TimeUnit.SECONDS);
+
+
+registerAction(id = "Stewardess_test", keyStroke = "ctrl shift D")
+{
+    event: AnActionEvent -> Stewardess.update_status(true);
+}
 registerAction(id = "Stewardess_call", keyStroke = "ctrl alt D")
 {
     event: AnActionEvent -> Stewardess.assistCopilot(true); // takes the inlay completion and starts inserting it word by word
@@ -299,4 +496,7 @@ registerAction(id = "Stewardess_continue", keyStroke = "ctrl alt H") { event: An
     Stewardess.addCompletionWord(true); // only inserts one word from the completion storage, ignoring if copilot is still offering it
 }
 if (!isIdeStartup)
-    show("Loaded Copilot's Stewardess (press 'ctrl alt D' when a completion shows up)")
+    show("Loaded Copilot's Stewardess (press 'ctrl alt D' when a completion shows up, 'ctrl shift d' will enable/disable copilot status updates)")
+
+
+

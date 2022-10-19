@@ -1,11 +1,11 @@
-# Steward
+# Stewardess
 IntelliJ LivePlugin that adds functionality to Copilot by offering word-by-word completion
 
 GitHub Copilot is a magnificent piece of software, however the plugins offer no configuration settings and no control over it's behavior.
 In most cases Copilot will offer many lines of code when the developer just needs a little bit of code.
 This results in a significant overhead, you are not only accepting 90% of garbage you also train the AI to deliver more garbage through it's telemetry responses.
 
-This IntelliJ plugin solves the problem.
+This IntelliJ plugin solves the problem, it's a Stewardess for our Copilot
 It does not change the way Copilot works, everything works as usual with one exception:
 When using the additional shortcut the plugin will take the currently displayed suggestion and only write one word of it into the IDE.
 It will simulate a user typing it, so Copilot will follow the typing without interruption.

@@ -23,7 +23,7 @@ By default: CTRL + ALT + D
 Keep pressing the shortcut until you are done, you can always use the original shortcut to complete everything at once.
 
 How to install:
-1) Install "LivePlugin" addon. That's a Plugin that allows to add Kotlin code as plugin without much hassle
+1) Install "LivePlugin" addon https://github.com/dkandalov/live-plugin. That's a Plugin that allows to add Kotlin code as plugin without much hassle
 2) create a new Kotlin plugin and copy/paste this plugin into it
 3) Run the plugin (you can auto-start it also)
 4) CTRL+ALT+D will activate the completion

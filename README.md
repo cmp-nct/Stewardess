@@ -9,6 +9,8 @@ This IntelliJ plugin solves the problem, it's a Stewardess for our Copilot
 It does not change the way Copilot works, everything works as usual with one exception:
 When using the additional shortcut the plugin will take the currently displayed suggestion and only write one word of it into the IDE.
 It will simulate a user typing it, so Copilot will follow the typing without interruption.
+![word-by-word-v1 1-demo](https://user-images.githubusercontent.com/78893154/197048317-34b0d526-69ee-446c-9f3d-4fd69ee9533a.gif)
+
 
 Disclaimer:
 I am not affiliated with Github or Copilot. I do not recommend to modify copilot's behavior itself. 
@@ -25,6 +27,7 @@ How to install:
 2) create a new Kotlin plugin and copy/paste this plugin into it
 3) Run the plugin (you can auto-start it also)
 4) CTRL+ALT+D will activate the completion
+5) CTRL+SHIFT+D will switch ON/OFF the Copilot Status indicator
 
 Contribute:
 I added a couple milestones that would advance this further.

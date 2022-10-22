@@ -1,5 +1,6 @@
 # Stewardess
 IntelliJ LivePlugin plugin that adds functionality to Copilot by offering word-by-word completion
+I am not a Kotlin/Java developer, Copilot was a great help to create this project.
 
 GitHub Copilot is a magnificent piece of software, however the plugins offer no configuration settings and no control over it's behavior.
 In most cases Copilot will offer many lines of code when the developer just needs a little bit of code.

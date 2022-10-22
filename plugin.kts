@@ -284,7 +284,7 @@ var circular_call = 0
                 //var inlay_cachedWidth = inlay.accessField("cachedWidth") as Int
                 //var inlay_cachedHeight = inlay.accessField("cachedHeight") as Int
                 // split inlay into inlay_content_words using whitespace as separator, include the delimiters in the words by using lookahead and lookbehind
-                var splitter = arrayOf("[.\\n\\s()]") // this must include a whitespace, otherwise the split will not work
+                var splitter = arrayOf("[.,\\n\\s()=+-]") // this must include a whitespace, otherwise the split will not work
                 // regex for all entries in splitter using this template: (?<=X)|(?=X) where X is the entry in splitter
                 var splitter_regex = splitter.map { "(?<=" + it + ")|(?=" + it + ")" }.joinToString(separator = "|")
                 inlay_content = inlay_content + ' '; // add whitespace to end of inlay_content, so that the last word is also split (arraylist)
@@ -307,7 +307,8 @@ var circular_call = 0
                     {
                         continue
                     }
-                    show ("DEBUG processing word: "+gson.toJson(word.toCharArray()))
+                    if (DEBUG_LEVEL >2)
+                        show ("DEBUG processing word: "+gson.toJson(word.toCharArray()))
                     if (word.matches(Regex('^'+"[\\t ]+"+'$')))
                     {
                         inlay_content_words_cleaned_last_word = inlay_content_words_cleaned_last_word + word

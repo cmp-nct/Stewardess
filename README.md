@@ -30,6 +30,12 @@ How to install:
 4) CTRL+ALT+D will activate the completion
 5) CTRL+SHIFT+D will switch ON/OFF the Copilot Status indicator
 
+Known issues:
+1) There is a bug in some combinations of word endings like `'xxx']);` it can have an issue with the separators, a bug in the regex somewhere.
+2) Sometimes it does not see a completion, copilot has multiple internal representations of the same thing. I believe one of the updates activated one representation that was rarely used. It just means that the word-by-word completion won't work in that line.
+3) Over the course of a few days the plugin stops to see completions at all, it's likely a deeper flaw not within my code. If that happens just reload the plugin.
+
 Contribute:
 I added a couple milestones that would advance this further.
 I think there is a lot that can be improved so contributors are welcome.
+Fixing one of the above bugs would be pleasant, I currently don't have time.
